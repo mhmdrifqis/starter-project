@@ -1,3 +1,5 @@
+
+
 /**
  * Task Repository - Mengelola penyimpanan dan pengambilan data Task
  * 
@@ -7,6 +9,12 @@
  * - User-specific operations
  * - Statistics dan reporting
  */
+if (typeof require !== 'undefined' && typeof module !== 'undefined') {
+    if (typeof User === 'undefined') {
+        EnhancedTask = require('../models/EnhancedTask');
+    }
+}
+
 class TaskRepository {
     constructor(storageManager) {
         this.storage = storageManager;

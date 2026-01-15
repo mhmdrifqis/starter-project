@@ -1,3 +1,4 @@
+const User = require('../models/User');
 /**
  * User Repository - Mengelola penyimpanan dan pengambilan data User
  * 
