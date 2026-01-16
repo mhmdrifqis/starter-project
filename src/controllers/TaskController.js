@@ -7,21 +7,6 @@
  * - Tidak mengandung business logic (itu ada di Model/Service)
  */
 
-// --- DEPENDENCY LOADING (Agar aman di Browser & Node.js) ---
-let EnhancedTask;
-if (typeof require !== 'undefined' && typeof module !== 'undefined') {
-    try {
-        EnhancedTask = require('../models/EnhancedTask');
-    } catch (e) {
-        console.warn('EnhancedTask module not found via require');
-    }
-} else if (typeof window !== 'undefined') {
-    if (window.EnhancedTask) {
-        EnhancedTask = window.EnhancedTask;
-    }
-}
-// -----------------------------------------------------------
-
 class TaskController {
     constructor(taskRepository, userRepository) {
         this.taskRepository = taskRepository;
@@ -487,9 +472,9 @@ class TaskController {
             }
             
             // Validate category
-            let validCategories = [];
-            if (EnhancedTask && typeof EnhancedTask.getAvailableCategories === 'function') {
-                validCategories = EnhancedTask.getAvailableCategories();
+            // Note: EnhancedTask diambil dari global scope (window.EnhancedTask)
+            if (typeof EnhancedTask !== 'undefined' && typeof EnhancedTask.getAvailableCategories === 'function') {
+                const validCategories = EnhancedTask.getAvailableCategories();
                 if (!validCategories.includes(category)) {
                     return {
                         success: false,
@@ -511,7 +496,7 @@ class TaskController {
             const sortedTasks = this.taskRepository.sort(categoryTasks, 'priority', 'desc');
             
             let displayCategory = category;
-            if (EnhancedTask && EnhancedTask.prototype && typeof EnhancedTask.prototype.getCategoryDisplayName === 'function') {
+            if (typeof EnhancedTask !== 'undefined' && EnhancedTask.prototype && typeof EnhancedTask.prototype.getCategoryDisplayName === 'function') {
                 displayCategory = EnhancedTask.prototype.getCategoryDisplayName.call({ _category: category });
             }
 
@@ -598,7 +583,7 @@ class TaskController {
             
             // Validate category
             let displayCategory = newCategory;
-            if (EnhancedTask && typeof EnhancedTask.getAvailableCategories === 'function') {
+            if (typeof EnhancedTask !== 'undefined' && typeof EnhancedTask.getAvailableCategories === 'function') {
                 const validCategories = EnhancedTask.getAvailableCategories();
                 if (!validCategories.includes(newCategory)) {
                     return {
@@ -636,7 +621,7 @@ class TaskController {
         try {
             let categoriesWithDisplay = [];
             
-            if (EnhancedTask && typeof EnhancedTask.getAvailableCategories === 'function') {
+            if (typeof EnhancedTask !== 'undefined' && typeof EnhancedTask.getAvailableCategories === 'function') {
                 const categories = EnhancedTask.getAvailableCategories();
                 categoriesWithDisplay = categories.map(category => ({
                     value: category,
@@ -667,6 +652,13 @@ class TaskController {
 // Export untuk digunakan di file lain
 if (typeof module !== 'undefined' && module.exports) {
     module.exports = TaskController;
+    // Inject EnhancedTask if in Node environment
+    if (typeof EnhancedTask === 'undefined') {
+        try {
+            // This is a workaround for Node.js environment
+            global.EnhancedTask = require('../models/EnhancedTask');
+        } catch (e) {}
+    }
 } else {
     window.TaskController = TaskController;
 }

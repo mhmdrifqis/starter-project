@@ -1,114 +1,137 @@
 /**
- * Enhanced Storage Manager - Storage dengan multi-entity support
+ * Enhanced Storage Manager - Day 2 Implementation
  * 
- * Improvements dari Day 1:
- * - Support multiple entities (users, tasks, settings)
- * - Better error handling
- * - Data migration support
- * - Backup dan restore functionality
+ * Enhanced version of the storage manager to support multiple entity types,
+ * better error handling, and improved performance with caching.
+ * 
+ * Demonstrates:
+ * - Enhanced separation of concerns for data storage
+ * - Support for multiple entity types (tasks, users, etc.)
+ * - Improved error handling and validation
+ * - Caching for better performance
+ * - Data migration and versioning support
+ * - Backup and restore functionality
  */
 class EnhancedStorageManager {
-    constructor(appName = 'taskManagementApp', version = '2.0') {
-        this.appName = appName;
-        this.version = version;
+    constructor(storageKey = 'taskManagementApp_v2') {
+        this.storageKey = storageKey;
         this.isAvailable = this._checkStorageAvailability();
+        this.cache = new Map();
+        this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
+        this.version = '2.0';
         
-        // Initialize app metadata
-        this._initializeApp();
+        // Initialize storage structure if needed
+        this._initializeStorage();
     }
     
     /**
-     * Save data untuk entity tertentu
-     * @param {string} entity - Entity name (users, tasks, settings)
-     * @param {any} data - Data to save
+     * Save data to localStorage with entity type support
+     * @param {string} entityType - The entity type (e.g., 'tasks', 'users')
+     * @param {any} data - The data to store
      * @returns {boolean} - Success status
      */
-    save(entity, data) {
+    save(entityType, data) {
         if (!this.isAvailable) {
             console.warn('localStorage not available, data will not persist');
             return false;
         }
         
         try {
-            const key = this._getKey(entity);
-            const dataToSave = {
-                data: data,
+            const fullKey = `${this.storageKey}_${entityType}`;
+            const dataToStore = {
+                version: this.version,
                 timestamp: new Date().toISOString(),
-                version: this.version
+                data: data
             };
             
-            localStorage.setItem(key, JSON.stringify(dataToSave));
+            const jsonData = JSON.stringify(dataToStore);
+            localStorage.setItem(fullKey, jsonData);
             
-            // Update metadata
-            this._updateMetadata(entity, dataToSave.timestamp);
+            // Update cache
+            this.cache.set(entityType, {
+                data: data,
+                timestamp: Date.now()
+            });
             
             return true;
         } catch (error) {
-            console.error(`Failed to save ${entity}:`, error);
+            console.error('Failed to save data:', error);
+            this._handleStorageError(error, 'save', entityType);
             return false;
         }
     }
     
     /**
-     * Load data untuk entity tertentu
-     * @param {string} entity - Entity name
-     * @param {any} defaultValue - Default value jika tidak ada data
-     * @returns {any} - Loaded data atau default value
+     * Load data from localStorage with entity type support
+     * @param {string} entityType - The entity type to load
+     * @param {any} defaultValue - Default value if entity doesn't exist
+     * @returns {any} - The loaded data or default value
      */
-    load(entity, defaultValue = null) {
+    load(entityType, defaultValue = null) {
         if (!this.isAvailable) {
             return defaultValue;
         }
         
         try {
-            const key = this._getKey(entity);
-            const storedData = localStorage.getItem(key);
+            // Check cache first
+            const cached = this._getFromCache(entityType);
+            if (cached !== null) {
+                return cached;
+            }
             
-            if (!storedData) {
+            const fullKey = `${this.storageKey}_${entityType}`;
+            const jsonData = localStorage.getItem(fullKey);
+            
+            if (jsonData === null) {
                 return defaultValue;
             }
             
-            const parsedData = JSON.parse(storedData);
+            const storedData = JSON.parse(jsonData);
             
-            // Check version compatibility
-            if (parsedData.version && parsedData.version !== this.version) {
-                console.warn(`Version mismatch for ${entity}: stored=${parsedData.version}, current=${this.version}`);
-                // Bisa implement migration logic di sini
-            }
+            // Handle version migration if needed
+            const migratedData = this._migrateData(storedData, entityType);
             
-            return parsedData.data;
+            // Cache the result
+            this.cache.set(entityType, {
+                data: migratedData.data,
+                timestamp: Date.now()
+            });
+            
+            return migratedData.data;
         } catch (error) {
-            console.error(`Failed to load ${entity}:`, error);
+            console.error('Failed to load data:', error);
+            this._handleStorageError(error, 'load', entityType);
             return defaultValue;
         }
     }
     
     /**
-     * Remove data untuk entity tertentu
-     * @param {string} entity - Entity name
+     * Remove data from localStorage
+     * @param {string} entityType - The entity type to remove
      * @returns {boolean} - Success status
      */
-    remove(entity) {
+    remove(entityType) {
         if (!this.isAvailable) {
             return false;
         }
         
         try {
-            const key = this._getKey(entity);
-            localStorage.removeItem(key);
+            const fullKey = `${this.storageKey}_${entityType}`;
+            localStorage.removeItem(fullKey);
             
-            // Update metadata
-            this._removeFromMetadata(entity);
+            // Remove from cache
+            this.cache.delete(entityType);
             
             return true;
         } catch (error) {
-            console.error(`Failed to remove ${entity}:`, error);
+            console.error('Failed to remove data:', error);
+            this._handleStorageError(error, 'remove', entityType);
             return false;
         }
     }
     
     /**
-     * Clear semua data aplikasi
+     * Clear all app data from localStorage
      * @returns {boolean} - Success status
      */
     clear() {
@@ -117,29 +140,118 @@ class EnhancedStorageManager {
         }
         
         try {
+            // Remove all keys that start with our storage key
             const keysToRemove = [];
-            
-            // Find all keys yang belong ke app ini
             for (let i = 0; i < localStorage.length; i++) {
                 const key = localStorage.key(i);
-                if (key && key.startsWith(this.appName)) {
+                if (key && key.startsWith(this.storageKey)) {
                     keysToRemove.push(key);
                 }
             }
             
-            // Remove all keys
             keysToRemove.forEach(key => localStorage.removeItem(key));
+            
+            // Clear cache
+            this.cache.clear();
             
             return true;
         } catch (error) {
-            console.error('Failed to clear app data:', error);
+            console.error('Failed to clear data:', error);
+            this._handleStorageError(error, 'clear');
             return false;
         }
     }
     
     /**
-     * Export semua data aplikasi
-     * @returns {Object|null} - Exported data atau null jika gagal
+     * Get all entity types stored
+     * @returns {string[]} - Array of entity types
+     */
+    getEntityTypes() {
+        if (!this.isAvailable) {
+            return [];
+        }
+        
+        try {
+            const entityTypes = [];
+            const prefix = `${this.storageKey}_`;
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.startsWith(prefix)) {
+                    const entityType = key.substring(prefix.length);
+                    entityTypes.push(entityType);
+                }
+            }
+            
+            return entityTypes;
+        } catch (error) {
+            console.error('Failed to get entity types:', error);
+            return [];
+        }
+    }
+    
+    /**
+     * Check if entity type exists
+     * @param {string} entityType - Entity type to check
+     * @returns {boolean} - Whether entity exists
+     */
+    exists(entityType) {
+        if (!this.isAvailable) {
+            return false;
+        }
+        
+        const fullKey = `${this.storageKey}_${entityType}`;
+        return localStorage.getItem(fullKey) !== null;
+    }
+    
+    /**
+     * Get storage usage information
+     * @returns {object} - Storage usage stats
+     */
+    getStorageInfo() {
+        if (!this.isAvailable) {
+            return { available: false };
+        }
+        
+        try {
+            let totalSize = 0;
+            let appSize = 0;
+            const entitySizes = {};
+            
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                const value = localStorage.getItem(key);
+                const itemSize = key.length + value.length;
+                
+                totalSize += itemSize;
+                
+                if (key.startsWith(this.storageKey)) {
+                    appSize += itemSize;
+                    
+                    // Track size by entity type
+                    const entityType = key.substring(`${this.storageKey}_`.length);
+                    entitySizes[entityType] = itemSize;
+                }
+            }
+            
+            return {
+                available: true,
+                totalSize,
+                appSize,
+                entitySizes,
+                itemCount: localStorage.length,
+                cacheSize: this.cache.size,
+                version: this.version
+            };
+        } catch (error) {
+            console.error('Failed to get storage info:', error);
+            return { available: false, error: error.message };
+        }
+    }
+    
+    /**
+     * Export all data for backup
+     * @returns {object} - Exported data
      */
     exportData() {
         if (!this.isAvailable) {
@@ -148,20 +260,15 @@ class EnhancedStorageManager {
         
         try {
             const exportData = {
-                appName: this.appName,
                 version: this.version,
-                exportedAt: new Date().toISOString(),
-                data: {}
+                timestamp: new Date().toISOString(),
+                entities: {}
             };
             
-            // Get all app keys
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                if (key && key.startsWith(this.appName)) {
-                    const value = localStorage.getItem(key);
-                    exportData.data[key] = JSON.parse(value);
-                }
-            }
+            const entityTypes = this.getEntityTypes();
+            entityTypes.forEach(entityType => {
+                exportData.entities[entityType] = this.load(entityType, []);
+            });
             
             return exportData;
         } catch (error) {
@@ -171,29 +278,33 @@ class EnhancedStorageManager {
     }
     
     /**
-     * Import data ke aplikasi
-     * @param {Object} importData - Data yang akan diimport
+     * Import data from backup
+     * @param {object} importData - Data to import
+     * @param {boolean} overwrite - Whether to overwrite existing data
      * @returns {boolean} - Success status
      */
-    importData(importData) {
-        if (!this.isAvailable) {
+    importData(importData, overwrite = false) {
+        if (!this.isAvailable || !importData || !importData.entities) {
             return false;
         }
         
         try {
-            // Validasi format import data
-            if (!importData.appName || !importData.data) {
-                throw new Error('Invalid import data format');
+            // Validate import data structure
+            if (!this._validateImportData(importData)) {
+                throw new Error('Invalid import data structure');
             }
             
-            // Warning jika app name berbeda
-            if (importData.appName !== this.appName) {
-                console.warn(`Importing data from different app: ${importData.appName}`);
-            }
-            
-            // Import each key
-            Object.keys(importData.data).forEach(key => {
-                localStorage.setItem(key, JSON.stringify(importData.data[key]));
+            // Import each entity type
+            Object.keys(importData.entities).forEach(entityType => {
+                const existingData = this.load(entityType, []);
+                
+                if (overwrite || existingData.length === 0) {
+                    this.save(entityType, importData.entities[entityType]);
+                } else {
+                    // Merge data (avoid duplicates by ID if possible)
+                    const mergedData = this._mergeEntityData(existingData, importData.entities[entityType]);
+                    this.save(entityType, mergedData);
+                }
             });
             
             return true;
@@ -204,101 +315,70 @@ class EnhancedStorageManager {
     }
     
     /**
-     * Get storage usage info
-     * @returns {Object} - Storage usage information
+     * Backup data to a downloadable file
+     * @param {string} filename - Backup filename
      */
-    getStorageInfo() {
-        if (!this.isAvailable) {
-            return { available: false };
+    downloadBackup(filename = null) {
+        const exportData = this.exportData();
+        if (!exportData) {
+            console.error('Failed to create backup');
+            return;
         }
         
-        try {
-            let totalSize = 0;
-            let appSize = 0;
-            let appKeys = 0;
-            
-            for (let i = 0; i < localStorage.length; i++) {
-                const key = localStorage.key(i);
-                const value = localStorage.getItem(key);
-                const itemSize = key.length + value.length;
-                
-                totalSize += itemSize;
-                
-                if (key.startsWith(this.appName)) {
-                    appSize += itemSize;
-                    appKeys++;
-                }
-            }
-            
-            return {
-                available: true,
-                totalSize,
-                appSize,
-                appKeys,
-                totalKeys: localStorage.length,
-                usagePercentage: totalSize > 0 ? (appSize / totalSize * 100).toFixed(2) : 0
-            };
-        } catch (error) {
-            console.error('Failed to get storage info:', error);
-            return { available: false, error: error.message };
+        const backupFilename = filename || `task-management-backup-${new Date().toISOString().split('T')[0]}.json`;
+        const dataStr = JSON.stringify(exportData, null, 2);
+        const dataBlob = new Blob([dataStr], { type: 'application/json' });
+        
+        // Create download link
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(dataBlob);
+        link.download = backupFilename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        
+        // Clean up
+        URL.revokeObjectURL(link.href);
+    }
+    
+    /**
+     * Clear cache for specific entity type or all
+     * @param {string} entityType - Entity type to clear (optional)
+     */
+    clearCache(entityType = null) {
+        if (entityType) {
+            this.cache.delete(entityType);
+        } else {
+            this.cache.clear();
         }
     }
     
     /**
-     * Get app metadata
-     * @returns {Object} - App metadata
+     * Get cache statistics
+     * @returns {object} - Cache statistics
      */
-    getMetadata() {
-        return this.load('_metadata', {
-            version: this.version,
-            createdAt: new Date().toISOString(),
-            entities: {}
+    getCacheStats() {
+        const stats = {
+            size: this.cache.size,
+            entities: [],
+            totalMemoryUsage: 0
+        };
+        
+        this.cache.forEach((value, key) => {
+            const memoryUsage = JSON.stringify(value.data).length;
+            stats.entities.push({
+                entityType: key,
+                timestamp: value.timestamp,
+                age: Date.now() - value.timestamp,
+                memoryUsage
+            });
+            stats.totalMemoryUsage += memoryUsage;
         });
+        
+        return stats;
     }
     
-    /**
-     * Check if entity exists
-     * @param {string} entity - Entity name
-     * @returns {boolean} - Existence status
-     */
-    exists(entity) {
-        if (!this.isAvailable) {
-            return false;
-        }
-        
-        const key = this._getKey(entity);
-        return localStorage.getItem(key) !== null;
-    }
-    
-    /**
-     * Get all entity names
-     * @returns {string[]} - Array of entity names
-     */
-    getEntities() {
-        if (!this.isAvailable) {
-            return [];
-        }
-        
-        const entities = [];
-        const prefix = this.appName + '_';
-        
-        for (let i = 0; i < localStorage.length; i++) {
-            const key = localStorage.key(i);
-            if (key && key.startsWith(prefix)) {
-                const entity = key.substring(prefix.length);
-                if (entity !== '_metadata') {
-                    entities.push(entity);
-                }
-            }
-        }
-        
-        return entities;
-    }
-    
-    // Private methods
-    _getKey(entity) {
-        return `${this.appName}_${entity}`;
-    }
+    // Private helper methods
     
     _checkStorageAvailability() {
         try {
@@ -311,35 +391,168 @@ class EnhancedStorageManager {
         }
     }
     
-    _initializeApp() {
-        if (!this.exists('_metadata')) {
-            this.save('_metadata', {
-                version: this.version,
-                createdAt: new Date().toISOString(),
-                entities: {}
-            });
+    _initializeStorage() {
+        if (!this.isAvailable) return;
+        
+        try {
+            // Check if this is a first-time initialization
+            const metaKey = `${this.storageKey}_meta`;
+            const meta = localStorage.getItem(metaKey);
+            
+            if (!meta) {
+                // First time initialization
+                const metaData = {
+                    version: this.version,
+                    initialized: new Date().toISOString(),
+                    entityTypes: []
+                };
+                
+                localStorage.setItem(metaKey, JSON.stringify(metaData));
+            }
+        } catch (error) {
+            console.error('Failed to initialize storage:', error);
         }
     }
     
-    _updateMetadata(entity, timestamp) {
-        const metadata = this.getMetadata();
-        metadata.entities[entity] = {
-            lastUpdated: timestamp,
-            version: this.version
-        };
-        this.save('_metadata', metadata);
+    _getFromCache(entityType) {
+        const cached = this.cache.get(entityType);
+        if (!cached) return null;
+        
+        // Check if cache entry is expired
+        if (Date.now() - cached.timestamp > this.cacheExpiry) {
+            this.cache.delete(entityType);
+            return null;
+        }
+        
+        return cached.data;
     }
     
-    _removeFromMetadata(entity) {
-        const metadata = this.getMetadata();
-        delete metadata.entities[entity];
-        this.save('_metadata', metadata);
+    _migrateData(storedData, entityType) {
+        // Handle data migration between versions
+        if (!storedData.version) {
+            // Migrate from v1 to v2
+            return {
+                version: this.version,
+                timestamp: new Date().toISOString(),
+                data: storedData // v1 data was stored directly
+            };
+        }
+        
+        // Add more migration logic as needed for future versions
+        return storedData;
+    }
+    
+    _handleStorageError(error, operation, entityType = null) {
+        const errorInfo = {
+            operation,
+            entityType,
+            error: error.message,
+            timestamp: new Date().toISOString()
+        };
+        
+        // In a real app, you might want to send this to an error tracking service
+        console.error('Storage error:', errorInfo);
+        
+        // Try to recover from quota exceeded errors
+        if (error.name === 'QuotaExceededError') {
+            this._handleQuotaExceeded();
+        }
+    }
+    
+    _handleQuotaExceeded() {
+        console.warn('Storage quota exceeded, attempting to free space...');
+        
+        try {
+            // Clear cache first
+            this.clearCache();
+            
+            // Remove old backup data if any
+            const keysToCheck = [];
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                if (key && key.includes('backup')) {
+                    keysToCheck.push(key);
+                }
+            }
+            
+            keysToCheck.forEach(key => {
+                try {
+                    localStorage.removeItem(key);
+                } catch (e) {
+                    // Ignore errors when cleaning up
+                }
+            });
+            
+            console.log('Storage cleanup completed');
+        } catch (error) {
+            console.error('Failed to clean up storage:', error);
+        }
+    }
+    
+    _validateImportData(importData) {
+        if (!importData || typeof importData !== 'object') {
+            return false;
+        }
+        
+        if (!importData.entities || typeof importData.entities !== 'object') {
+            return false;
+        }
+        
+        // Validate each entity type
+        for (const entityType in importData.entities) {
+            if (!Array.isArray(importData.entities[entityType])) {
+                return false;
+            }
+        }
+        
+        return true;
+    }
+    
+    _mergeEntityData(existingData, newData) {
+        if (!Array.isArray(existingData) || !Array.isArray(newData)) {
+            return newData;
+        }
+        
+        const merged = [...existingData];
+        const existingIds = new Set(existingData.map(item => item.id).filter(id => id));
+        
+        newData.forEach(item => {
+            if (!item.id || !existingIds.has(item.id)) {
+                merged.push(item);
+            }
+        });
+        
+        return merged;
     }
 }
 
-// Export untuk digunakan di file lain
+// Backward compatibility - extend the original StorageManager interface
+class StorageManager extends EnhancedStorageManager {
+    constructor(storageKey = 'taskManagementApp_v2') {
+        super(storageKey);
+    }
+    
+    // Maintain backward compatibility with Day 1 interface
+    save(key, data) {
+        // If called with old interface (key, data), treat key as entityType
+        return super.save(key, data);
+    }
+    
+    load(key, defaultValue = null) {
+        // If called with old interface (key, defaultValue), treat key as entityType
+        return super.load(key, defaultValue);
+    }
+    
+    remove(key) {
+        // If called with old interface (key), treat key as entityType
+        return super.remove(key);
+    }
+}
+
+// Export for use in other modules
 if (typeof module !== 'undefined' && module.exports) {
-    module.exports = EnhancedStorageManager;
+    module.exports = { StorageManager, EnhancedStorageManager };
 } else {
+    window.StorageManager = StorageManager;
     window.EnhancedStorageManager = EnhancedStorageManager;
 }
