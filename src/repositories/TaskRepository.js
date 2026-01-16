@@ -9,7 +9,7 @@
  */
 if (typeof require !== 'undefined' && typeof module !== 'undefined') {
     if (typeof User === 'undefined') {
-        Task = require('../models/EnchanedTask');
+        Task = require('../models/EnhancedTask');
     }
 }
 class TaskRepository {
