@@ -66,14 +66,6 @@ function initializeApp() {
  * Setup authentication event listeners
  */
 function setupAuthEventListeners() {
-
-    // Category filter buttons
-    const categoryButtons = document.querySelectorAll('.category-btn');
-    categoryButtons.forEach(btn => {
-        btn.addEventListener('click', handleCategoryFilter);
-    });
-
-
     // Login button
     const loginBtn = document.getElementById('loginBtn');
     if (loginBtn) {
@@ -136,6 +128,12 @@ function setupAuthEventListeners() {
     if (refreshTasks) {
         refreshTasks.addEventListener('click', () => app.taskView.refresh());
     }
+
+        // Category filter buttons
+    const categoryButtons = document.querySelectorAll('.category-btn');
+    categoryButtons.forEach(btn => {
+        btn.addEventListener('click', handleCategoryFilter);
+    });
 }
 
 /**
@@ -443,9 +441,6 @@ if (typeof module !== 'undefined' && module.exports) {
         app
     };
 }
-
-
-// Tambahkan functions baru di akhir file
 
 /**
  * Handle category filter changes
