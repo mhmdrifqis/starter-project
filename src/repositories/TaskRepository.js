@@ -1,9 +1,12 @@
+<<<<<<< HEAD
 // <<<<<<< HEAD
 
 // =======
 // const EnhancedTask = require('../models/EnhancedTask');
 // >>>>>>> 95771dbc43d27b922d304f42e71b8d920f779495
 
+=======
+>>>>>>> feature/task-categories
 /**
  * Task Repository - Mengelola penyimpanan dan pengambilan data Task
  * 
@@ -15,10 +18,9 @@
  */
 if (typeof require !== 'undefined' && typeof module !== 'undefined') {
     if (typeof User === 'undefined') {
-        EnhancedTask = require('../models/EnhancedTask');
+        Task = require('../models/EnhancedTask');
     }
 }
-
 class TaskRepository {
     constructor(storageManager) {
         this.storage = storageManager;
@@ -34,6 +36,8 @@ class TaskRepository {
      * @param {Object} taskData - Data task
      * @returns {EnhancedTask} - Task yang baru dibuat
      */
+
+
     create(taskData) {
         try {
             const task = new EnhancedTask(
@@ -91,14 +95,77 @@ class TaskRepository {
         return this.findAll().filter(task => task.assigneeId === assigneeId);
     }
     
-    /**
-     * Cari task berdasarkan kategori
-     * @param {string} category - Kategori
-     * @returns {EnhancedTask[]} - Array task dengan kategori tertentu
-     */
-    findByCategory(category) {
-        return this.findAll().filter(task => task.category === category);
-    }
+    // Tambahkan method ini di class TaskRepository
+
+/**
+ * Find tasks by category
+ * @param {string} category - Category to filter by
+ * @returns {EnhancedTask[]} - Array of tasks in category
+ */
+findByCategory(category) {
+    return this.findAll().filter(task => task.category === category);
+}
+
+/**
+ * Get task statistics by category
+ * @param {string} userId - User ID (optional)
+ * @returns {Object} - Statistics grouped by category
+ */
+getCategoryStats(userId = null) {
+    let tasks = userId ? this.findByOwner(userId) : this.findAll();
+    
+    const stats = {};
+    const categories = EnhancedTask.getAvailableCategories();
+    
+    // Initialize all categories with 0
+    categories.forEach(category => {
+        stats[category] = {
+            total: 0,
+            completed: 0,
+            pending: 0,
+            overdue: 0
+        };
+    });
+    
+    // Count tasks in each category
+    tasks.forEach(task => {
+        const category = task.category;
+        if (stats[category]) {
+            stats[category].total++;
+            
+            if (task.isCompleted) {
+                stats[category].completed++;
+            } else {
+                stats[category].pending++;
+            }
+            
+            if (task.isOverdue) {
+                stats[category].overdue++;
+            }
+        }
+    });
+    
+    return stats;
+}
+
+/**
+ * Get most used categories
+ * @param {string} userId - User ID (optional)
+ * @param {number} limit - Number of categories to return
+ * @returns {Array} - Array of categories sorted by usage
+ */
+getMostUsedCategories(userId = null, limit = 5) {
+    const stats = this.getCategoryStats(userId);
+    
+    return Object.entries(stats)
+        .sort(([,a], [,b]) => b.total - a.total)
+        .slice(0, limit)
+        .map(([category, data]) => ({
+            category,
+            count: data.total,
+            displayName: EnhancedTask.prototype.getCategoryDisplayName.call({ _category: category })
+        }));
+}
     
     /**
      * Cari task berdasarkan status

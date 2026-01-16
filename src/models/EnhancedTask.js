@@ -88,6 +88,52 @@ class EnhancedTask {
         return Math.min(100, (this._actualHours / this._estimatedHours) * 100);
     }
     
+        // Tambahkan di class EnhancedTask, setelah existing methods
+
+    /**
+     * Update task category
+     * @param {string} newCategory - New category
+     */
+    updateCategory(newCategory) {
+        this._category = this._validateCategory(newCategory);
+        this._updateTimestamp();
+    }
+
+    /**
+     * Get available categories (static method)
+     * @returns {string[]} - Array of valid categories
+     */
+    static getAvailableCategories() {
+        return ['work', 'personal', 'study', 'health', 'finance', 'shopping', 'other'];
+    }
+
+    /**
+     * Get category display name
+     * @returns {string} - Formatted category name
+     */
+    getCategoryDisplayName() {
+        const categoryNames = {
+            'work': 'Work & Business',
+            'personal': 'Personal',
+            'study': 'Study & Learning',
+            'health': 'Health & Fitness',
+            'finance': 'Finance & Money',
+            'shopping': 'Shopping',
+            'other': 'Other'
+        };
+        
+        return categoryNames[this._category] || this._category;
+    }
+
+    /**
+     * Check if task belongs to specific category
+     * @param {string} category - Category to check
+     * @returns {boolean} - True if task is in category
+     */
+    isInCategory(category) {
+        return this._category === category;
+    }
+
     // Public methods untuk operasi task
     updateTitle(newTitle) {
         if (!newTitle || newTitle.trim() === '') {
@@ -260,3 +306,4 @@ if (typeof module !== 'undefined' && module.exports) {
 } else {
     window.EnhancedTask = EnhancedTask;
 }
+
